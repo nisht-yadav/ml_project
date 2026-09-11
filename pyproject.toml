@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.backends.legacy:build"
+
+[project]
+name = "image-tampering-detection"
+version = "1.0.0"
+description = "CNN-based image tampering detection with ELA/DCT frequency features and Grad-CAM explainability"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [
+  { name = "Your Name", email = "your@email.com" }
+]
+keywords = ["image forensics", "tampering detection", "deep learning", "grad-cam", "ELA", "DCT"]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["src*", "app*"]

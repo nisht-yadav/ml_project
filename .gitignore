@@ -1,0 +1,59 @@
+# ============================================================
+# .gitignore — Image Tampering Detection Project
+# ============================================================
+
+# Virtual environment
+.venv/
+venv/
+env/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# Data (large files — do not commit raw data)
+data/raw/
+data/processed/
+!data/raw/authentic/.gitkeep
+!data/raw/tampered/.gitkeep
+!data/processed/**/.gitkeep
+
+# Model weights & checkpoints
+models/saved/
+models/checkpoints/
+*.pt
+*.pth
+*.ckpt
+
+# Logs & results
+logs/
+results/plots/
+results/predictions/
+results/reports/
+runs/          # TensorBoard
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE
+.vscode/settings.json
+.idea/
+*.swp
+*.swo
+
+# Secrets
+.env
+
+# Build
+dist/
+build/
+*.egg-info/
