@@ -13,7 +13,7 @@ It combines raw image features with **ELA** (Error Level Analysis) and **DCT** f
 
 ### 1. Clone & enter the project
 ```bash
-git clone <repo-url>
+git clone https://github.com/nisht-yadav/ml_project
 cd ml_project
 ```
 
