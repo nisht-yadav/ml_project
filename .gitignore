@@ -21,6 +21,7 @@ __pycache__/
 # Data (large files — do not commit raw data)
 data/raw/
 data/processed/
+data/normalized/
 !data/raw/authentic/.gitkeep
 !data/raw/tampered/.gitkeep
 !data/processed/**/.gitkeep
@@ -38,6 +39,9 @@ results/plots/
 results/predictions/
 results/reports/
 runs/          # TensorBoard
+
+# Archived per-run experiment artifacts (logs, checkpoints, plots)
+experiments/
 
 # OS
 .DS_Store
@@ -57,3 +61,7 @@ desktop.ini
 dist/
 build/
 *.egg-info/
+
+# Local sample images for manual testing (not part of the repo)
+test/
+test_normalized/

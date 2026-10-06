@@ -32,7 +32,7 @@ CORE = [
 # Checked separately (heavy / slow)
 HEAVY = [
     ("tensorboard",    "tensorboard"),
-    ("streamlit",      "streamlit"),
+    ("flask",          "flask"),
 ]
 
 print("=== Core packages ===")

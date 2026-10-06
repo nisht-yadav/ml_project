@@ -1,0 +1,75 @@
+# ============================================================
+# TamperResNet50 config: CLASS-BIASED variant
+#
+# Same architecture/training loop as tamper_resnet50_baseline.yaml -
+# only loss.use_pos_weight/pos_weight and inference.threshold differ,
+# demonstrating that class-bias is a config change, not a code change.
+#
+# Two independent levers are used here together (you can use either
+# alone instead - see the comments in tamper_resnet50_baseline.yaml):
+#   - pos_weight > 1 biases TRAINING toward catching more tampered
+#     images (fewer false negatives), at the cost of some precision.
+#   - threshold < 0.5 additionally biases INFERENCE the same direction
+#     without any retraining, by making "tampered" easier to trigger.
+# ============================================================
+
+experiment:
+  run_name: "tamper_resnet50_class_biased"
+  seed: 42
+
+data:
+  dataset_dir: "data/subset"
+  img_size: 224
+  batch_size: 32
+  val_ratio: 0.15
+  test_ratio: 0.15
+  num_workers: 2
+  augment: true
+  hflip: true
+  random_crop: true
+  color_jitter: true
+  jpeg_recompression: false
+  jpeg_quality_range: [30, 90]
+
+model:
+  # See tamper_resnet50_baseline.yaml for what this does.
+  init_from_checkpoint: null
+
+  freeze_stages: ["conv1", "layer1"]
+  freeze_bn: false
+  dropout: 0.5
+
+optim:
+  weight_decay: 0.0001
+  lr_groups:
+    layer2: 0.00003
+    layer3: 0.0001
+    layer4: 0.0003
+    head: 0.001
+
+loss:
+  # Biases the LOSS: positive (tampered) mistakes count ~1.4x as much,
+  # pushing the model to catch more real tampered images. Tune this to
+  # the class imbalance of whatever dataset_dir is used (see
+  # scripts/prepare_subset.py's own pos_weight notes for how this was
+  # picked for data/subset's ~1.45:1 ratio).
+  use_pos_weight: true
+  pos_weight: 1.4
+
+inference:
+  # Biases INFERENCE on top of the above: lowers the bar for calling an
+  # image "tampered" further, without retraining. Set back to 0.5 to
+  # isolate pos_weight's effect alone.
+  threshold: 0.4
+
+training:
+  epochs_cap: 20
+  early_stopping_patience: 5
+  mixed_precision: true
+
+paths:
+  model_save_path: "models/saved/tamper_resnet50_class_biased_best.pth"
+  last_checkpoint_path: "models/checkpoints/tamper_resnet50_class_biased_last.pth"
+  split_save_path: "data/processed/split_tamper_resnet50_class_biased.json"
+  plots_dir: "results/plots/tamper_resnet50_class_biased"
+  experiments_dir: "experiments"

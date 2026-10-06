@@ -1,0 +1,97 @@
+# ============================================================
+# TamperResNet50 config: PLAIN BASELINE variant
+#
+# Every design choice scripts/train_tamper_resnet50.py needs is read
+# from this file - nothing below is hardcoded in the training script.
+# To get the "class-biased" or "feature-extracting" variants described
+# in the brief, copy this file and change values (see
+# configs/tamper_resnet50_class_biased.yaml and
+# configs/tamper_resnet50_feature_extractor.yaml) - the training
+# script itself never needs to change.
+# ============================================================
+
+experiment:
+  run_name: "tamper_resnet50_baseline"
+  seed: 42
+
+data:
+  dataset_dir: "data/subset"       # expects <dataset_dir>/authentic, <dataset_dir>/tampered
+  img_size: 224                    # LetterboxResize target (longest side -> img_size, then padded to square)
+  batch_size: 32
+  val_ratio: 0.15
+  test_ratio: 0.15
+  num_workers: 2
+
+  # Augmentation - see src/data/preprocessing.py::get_train_transforms.
+  # `augment` is the master switch for hflip/random_crop/color_jitter;
+  # set it False to disable all three at once for a controlled run.
+  augment: true
+  hflip: true
+  random_crop: true
+  color_jitter: true
+
+  # JPEG-recompression augmentation is a SEPARATE flag from `augment`
+  # (see src/data/preprocessing.py::RandomJPEGRecompression) - it
+  # interacts with ELA-based explainability, so it can be toggled
+  # independently of the other augmentations.
+  jpeg_recompression: false
+  jpeg_quality_range: [30, 90]
+
+model:
+  # Set to a previous run's checkpoint path (e.g.
+  # "experiments/tamper_resnet50_baseline/best_model.pt") to initialize
+  # weights from it instead of ImageNet - e.g. to continue training on a
+  # second dataset. null = normal ImageNet-pretrained start.
+  init_from_checkpoint: null
+
+  # Explicit list of stages to freeze - no ambiguous "num_frozen_layers"
+  # count. Valid names: conv1, layer1, layer2, layer3, layer4.
+  # Baseline: freeze only the stem + layer1 (generic low-level features),
+  # fine-tune layer2-4 + head.
+  freeze_stages: ["conv1", "layer1"]
+
+  # Freezes BatchNorm running stats across the WHOLE backbone,
+  # independent of freeze_stages above. Off by default here since
+  # batch_size=32 is large enough for stable BN statistics.
+  freeze_bn: false
+
+  dropout: 0.5
+
+optim:
+  weight_decay: 0.0001
+  # Differential LR per stage group. Every stage not in freeze_stages
+  # (plus "head") must appear in exactly one key here (keys may combine
+  # stages with "_", e.g. "conv1_layer1"). See
+  # TamperResNet50.get_param_groups for the exact matching rule.
+  lr_groups:
+    layer2: 0.00003
+    layer3: 0.0001
+    layer4: 0.0003
+    head: 0.001
+
+loss:
+  # use_pos_weight/pos_weight bias TRAINING (the loss itself). Off here:
+  # this is the plain, unbiased baseline.
+  use_pos_weight: false
+  pos_weight: 1.0
+
+inference:
+  # threshold biases INFERENCE (the decision boundary), applied to an
+  # already-trained model - fully independent of use_pos_weight above.
+  # Used for the final test-set report and by predict()/predict_with_features().
+  threshold: 0.5
+
+training:
+  epochs_cap: 20
+  early_stopping_patience: 5
+  # float16 autocast + gradient scaling (see resolve_amp() in the training
+  # script) instead of plain float32 - halves activation memory and is
+  # usually faster on CUDA. Automatically falls back to float32 on CPU.
+  mixed_precision: true
+
+paths:
+  model_save_path: "models/saved/tamper_resnet50_baseline_best.pth"
+  last_checkpoint_path: "models/checkpoints/tamper_resnet50_baseline_last.pth"
+  split_save_path: "data/processed/split_tamper_resnet50_baseline.json"
+  plots_dir: "results/plots/tamper_resnet50_baseline"
+  experiments_dir: "experiments"

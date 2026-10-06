@@ -1,0 +1,73 @@
+# ============================================================
+# TamperResNet50 config: FULL FINE-TUNE, RESUMED at batch_size=96
+#
+# Continues from tamper_resnet50_full_finetune's epoch-3 checkpoint,
+# switching to a larger batch_size now that GPU memory headroom was
+# confirmed (~2GB/6GB used at batch=32). lr_groups are scaled up 3x
+# from the original batch=32 values (linear scaling rule: LR scales
+# with batch_size so each step's effective update size stays
+# consistent with the original schedule instead of under-training).
+#
+# This is the "try 96 first" candidate - see
+# tamper_resnet50_full_finetune_resumed_b64.yaml for the fallback if
+# 96 OOMs.
+# ============================================================
+
+experiment:
+  run_name: "tamper_resnet50_full_finetune_resumed_b96"
+  seed: 42
+
+data:
+  dataset_dir: "/home/user/ml_data/normalized"
+  img_size: 224
+  batch_size: 96
+  val_ratio: 0.15
+  test_ratio: 0.15
+  num_workers: 8
+
+  augment: true
+  hflip: true
+  random_crop: true
+  color_jitter: true
+  jpeg_recompression: false
+  jpeg_quality_range: [30, 90]
+
+model:
+  # Continue from the epoch-3 checkpoint of the batch=32 run - only
+  # weights carry over (Adam's momentum/variance state is NOT saved by
+  # this pipeline, so the optimizer restarts fresh - see
+  # docs/tamper_resnet50_pipeline.md section 10).
+  init_from_checkpoint: "models/checkpoints/tamper_resnet50_full_finetune_last.pth"
+
+  freeze_stages: []
+  freeze_bn: false
+  dropout: 0.5
+
+optim:
+  weight_decay: 0.0001
+  # 3x the batch=32 values (batch_size 32 -> 96 is a 3x increase).
+  lr_groups:
+    conv1_layer1: 0.000003
+    layer2: 0.00003
+    layer3: 0.00015
+    layer4: 0.0006
+    head: 0.003
+
+loss:
+  use_pos_weight: false
+  pos_weight: 1.0
+
+inference:
+  threshold: 0.5
+
+training:
+  epochs_cap: 12
+  early_stopping_patience: 3
+  mixed_precision: true
+
+paths:
+  model_save_path: "models/saved/tamper_resnet50_full_finetune_resumed_b96_best.pth"
+  last_checkpoint_path: "models/checkpoints/tamper_resnet50_full_finetune_resumed_b96_last.pth"
+  split_save_path: "data/processed/split_tamper_resnet50_full_finetune_resumed_b96.json"
+  plots_dir: "results/plots/tamper_resnet50_full_finetune_resumed_b96"
+  experiments_dir: "experiments"

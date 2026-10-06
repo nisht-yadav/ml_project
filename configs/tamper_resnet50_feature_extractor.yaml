@@ -1,0 +1,73 @@
+# ============================================================
+# TamperResNet50 config: FEATURE-EXTRACTING variant
+#
+# Purpose: produce a stable Agent A/B feature source for later fusion
+# (see model.extract_features()/predict_with_features()), not the
+# strongest possible standalone classifier - so the whole pretrained
+# backbone is frozen (weights AND BatchNorm running stats) and only the
+# head is trained. The resulting checkpoint's 2048-d extract_features()
+# output stays fixed to ImageNet-general features plus whatever the
+# frozen backbone already encoded, which is what makes it a consistent,
+# reusable input for a fusion classifier trained later.
+# ============================================================
+
+experiment:
+  run_name: "tamper_resnet50_feature_extractor"
+  seed: 42
+
+data:
+  dataset_dir: "data/subset"
+  img_size: 224
+  batch_size: 32
+  val_ratio: 0.15
+  test_ratio: 0.15
+  num_workers: 2
+  augment: true
+  hflip: true
+  random_crop: true
+  color_jitter: true
+  jpeg_recompression: false
+  jpeg_quality_range: [30, 90]
+
+model:
+  # See tamper_resnet50_baseline.yaml for what this does.
+  init_from_checkpoint: null
+
+  # Every conv stage frozen - only the head (fc) is trainable. The
+  # 2048-d feature vector extract_features() returns is therefore
+  # exactly the frozen backbone's output, unaffected by how the head
+  # is trained.
+  freeze_stages: ["conv1", "layer1", "layer2", "layer3", "layer4"]
+
+  # Frozen backbone => also freeze its BN running stats, so they can
+  # never drift from ImageNet statistics regardless of batch_size.
+  freeze_bn: true
+
+  dropout: 0.5
+
+optim:
+  weight_decay: 0.0001
+  # Only "head" has trainable parameters when every stage is frozen -
+  # get_param_groups will raise a clear error if any other stage is
+  # accidentally left uncovered here.
+  lr_groups:
+    head: 0.001
+
+loss:
+  use_pos_weight: false
+  pos_weight: 1.0
+
+inference:
+  threshold: 0.5
+
+training:
+  epochs_cap: 20
+  early_stopping_patience: 5
+  mixed_precision: true
+
+paths:
+  model_save_path: "models/saved/tamper_resnet50_feature_extractor_best.pth"
+  last_checkpoint_path: "models/checkpoints/tamper_resnet50_feature_extractor_last.pth"
+  split_save_path: "data/processed/split_tamper_resnet50_feature_extractor.json"
+  plots_dir: "results/plots/tamper_resnet50_feature_extractor"
+  experiments_dir: "experiments"

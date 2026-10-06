@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Image Tampering Detector</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+<main class="page">
+  <h1>Image Tampering Detection</h1>
+  <p class="muted">Upload an image for a tampered/authentic prediction, a Grad-CAM explanation of the
+     model's decision, and two independent forensic signals (ELA and DCT) that don't rely on the model.</p>
+
+  <div class="card settings">
+    <span>Checkpoint: <code>{{ settings.checkpoint }}</code></span>
+    <span>ELA quality: <code>{{ settings.ela_quality }}</code></span>
+    <span>DCT block size: <code>{{ settings.dct_block_size }}</code></span>
+    <span>Normalize JPEG quality: <code>{{ settings.normalize_quality }}</code></span>
+    <span>Decision threshold: <code>{{ "%.2f"|format(settings.threshold or 0.5) }}</code></span>
+    <span>Max upload: <code>{{ settings.max_upload_mb }} MB</code></span>
+  </div>
+
+  {% if model_error %}
+    <div class="error">{{ model_error }}</div>
+  {% endif %}
+
+  <div class="card">
+    <form class="upload" method="post" action="/analyze" enctype="multipart/form-data">
+      <input type="file" name="image" accept="image/*" required {% if model_error %}disabled{% endif %}>
+      <button type="submit" {% if model_error %}disabled{% endif %}>Analyze image</button>
+    </form>
+    <p class="muted note">Every upload is first normalized to match the training data
+      (8-bit RGB, re-saved as JPEG at quality {{ settings.normalize_quality }}) before analysis.</p>
+  </div>
+
+  {% if error %}
+    <div class="error">{{ error }}</div>
+  {% endif %}
+
+  {% if result %}
+    <div class="card result">
+      {% if result.prediction_error %}
+        <div class="error">{{ result.prediction_error }}</div>
+      {% else %}
+        <div class="banner {{ 'tampered' if result.label == 'tampered' else 'authentic' }}">
+          Prediction: {{ result.label|upper }} &mdash; confidence {{ "%.1f"|format(result.confidence_pct) }}%
+          <small>P(tampered) = {{ "%.1f"|format(result.prob_tampered_pct) }}% &middot;
+            decision threshold = {{ "%.2f"|format(result.threshold) }}</small>
+        </div>
+      {% endif %}
+    </div>
+
+    <div class="grid result">
+      <div class="card panel">
+        <h2>Original</h2>
+        <img src="{{ result.original }}" alt="Normalized upload">
+        <div class="caption">Normalized to 8-bit RGB JPEG (matches the training data format) before analysis.</div>
+      </div>
+
+      <div class="card panel">
+        <h2>Grad-CAM</h2>
+        {% if result.gradcam %}
+          <img src="{{ result.gradcam }}" alt="Grad-CAM overlay">
+          <div class="caption">Regions that most influenced this model's decision.</div>
+        {% else %}
+          <div class="notice">Unavailable: {{ result.gradcam_error or "no Grad-CAM output" }}</div>
+        {% endif %}
+      </div>
+
+      <div class="card panel">
+        <h2>ELA</h2>
+        {% if result.ela %}
+          <img src="{{ result.ela }}" alt="ELA heatmap">
+          <div class="caption">mean diff {{ "%.2f"|format(result.ela_stats.mean) }} &middot;
+            max diff {{ "%.2f"|format(result.ela_stats.max) }}</div>
+        {% else %}
+          <div class="notice">Unavailable: {{ result.ela_error }}</div>
+        {% endif %}
+      </div>
+
+      <div class="card panel">
+        <h2>DCT</h2>
+        {% if result.dct %}
+          <img src="{{ result.dct }}" alt="DCT heatmap">
+          <div class="caption">mean high-freq energy {{ "%.1f"|format(result.dct_stats.mean_high_freq_energy) }}
+            &middot; variance {{ "%.1f"|format(result.dct_stats.variance_high_freq_energy) }}</div>
+        {% else %}
+          <div class="notice">Unavailable: {{ result.dct_error }}</div>
+        {% endif %}
+      </div>
+    </div>
+  {% endif %}
+
+  <details class="card explain">
+    <summary><strong>What am I looking at?</strong></summary>
+    <p><strong>Grad-CAM</strong> highlights the pixels that most influenced <em>this specific model's</em>
+      decision. It explains the CNN, not the image: if the model is wrong, Grad-CAM will still point at
+      whatever it learned to look for.</p>
+    <p><strong>ELA (Error Level Analysis)</strong> re-saves the image as JPEG at a fixed quality and shows
+      where the result differs most from the original. Regions that were compressed at a different history
+      (spliced in from another photo, or edited and re-saved) tend to light up brighter than their
+      surroundings. Plain image processing, no model involved.</p>
+    <p><strong>DCT (frequency analysis)</strong> splits the image into blocks and measures how much
+      high-frequency detail each block contains. Blocks with unusually high or low energy relative to their
+      neighbors can indicate re-compression or a spliced-in region. Plain image processing, no model involved.</p>
+    <p>ELA and DCT are shown alongside Grad-CAM because they're independent of the CNN: they can flag a
+      suspicious region even when the model gets the label wrong.</p>
+  </details>
+</main>
+</body>
+</html>

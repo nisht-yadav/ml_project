@@ -1,0 +1,72 @@
+# ============================================================
+# TamperResNet50 config: FROZEN-BACKBONE adaptation, CONTINUED
+#
+# tamper_resnet50_frozen_backbone_new_data.yaml capped at epochs_cap=15
+# and never triggered early stopping - val loss was still strictly
+# decreasing every single epoch (0.0695 -> 0.0657 -> 0.0631 for the
+# last 3), meaning the cap cut training off before any overfitting
+# signal appeared. This config continues from that run's epoch-15
+# checkpoint with a much higher epochs_cap, so early stopping
+# (patience=3) - not an arbitrary cap - is what actually decides when
+# to stop, once 3 consecutive non-improving epochs give real evidence
+# of overfitting.
+#
+# Same architecture/data/LR as the run being continued - only
+# init_from_checkpoint, epochs_cap, run_name, and the output paths
+# differ. That prior run's checkpoint is only ever READ here, never
+# overwritten.
+# ============================================================
+
+experiment:
+  run_name: "tamper_resnet50_frozen_backbone_new_data_continued"
+  seed: 42
+
+data:
+  dataset_dir: "/home/user/ml_data/raw_new_normalized"
+  img_size: 224
+  batch_size: 96
+  val_ratio: 0.15
+  test_ratio: 0.15
+  num_workers: 8
+
+  augment: true
+  hflip: true
+  random_crop: true
+  color_jitter: true
+  jpeg_recompression: false
+  jpeg_quality_range: [30, 90]
+
+model:
+  # Continue from the epoch-15 checkpoint of the capped run - read-only,
+  # never overwritten by this run.
+  init_from_checkpoint: "models/saved/tamper_resnet50_frozen_backbone_new_data_best.pth"
+
+  freeze_stages: ["conv1", "layer1", "layer2", "layer3", "layer4"]
+  freeze_bn: true
+  dropout: 0.5
+
+optim:
+  weight_decay: 0.0001
+  lr_groups:
+    head: 0.001
+
+loss:
+  use_pos_weight: false
+  pos_weight: 1.0
+
+inference:
+  threshold: 0.5
+
+training:
+  # High cap - early stopping (not this number) is meant to be what
+  # actually ends the run, once it finds real overfitting evidence.
+  epochs_cap: 50
+  early_stopping_patience: 3
+  mixed_precision: true
+
+paths:
+  model_save_path: "models/saved/tamper_resnet50_frozen_backbone_new_data_continued_best.pth"
+  last_checkpoint_path: "models/checkpoints/tamper_resnet50_frozen_backbone_new_data_continued_last.pth"
+  split_save_path: "data/processed/split_tamper_resnet50_frozen_backbone_new_data_continued.json"
+  plots_dir: "results/plots/tamper_resnet50_frozen_backbone_new_data_continued"
+  experiments_dir: "experiments"

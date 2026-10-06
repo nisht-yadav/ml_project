@@ -1,0 +1,110 @@
+# ============================================================
+# TamperResNet50 config: layer4 UNFROZEN on COMBINED dataset
+#
+# Lesson from tamper_resnet50_frozen_backbone_new_data(_continued):
+# retraining the head on the new dataset ALONE fixed that dataset but
+# catastrophically forgot the 308K dataset (authentic accuracy on the
+# 308K set collapsed from 92.69% to 2.67%) - freezing the backbone
+# protects the FEATURES, but the head's decision boundary still
+# drifted entirely toward whatever single distribution it was shown.
+#
+# First fix tried (head-only, fully frozen backbone, on the UNION of
+# both datasets): plateaued immediately at val_loss~0.403 / ~82%
+# accuracy for 10 straight epochs (early-stopped at epoch 10, best
+# epoch 7) with train accuracy equally stuck - underfitting, not
+# overfitting: a single 2,049-param linear head lacks the capacity to
+# jointly fit both datasets' combined distribution. This result was
+# not worth keeping, so this run reuses the same run_name/output paths
+# and overwrites it.
+#
+# Second attempt (this config): also unfreeze layer4 (the last, most
+# task-specific conv stage) for more capacity, while conv1/layer1/
+# layer2/layer3 stay frozen - the earliest, most generic feature
+# layers stay protected.
+#
+# Starts from the ORIGINAL 308K model (tamper_resnet50_full_finetune_
+# resumed_b96, epoch 6) - NOT the plateaued checkpoint this overwrites,
+# and NOT the already-forgetful frozen_backbone_new_data_continued
+# checkpoint - a clean start with more capacity. That checkpoint, and
+# every other existing checkpoint besides this run's own prior
+# (intentionally discarded) attempt, is only ever READ here.
+#
+# 2026-09-13: got to epoch 2 (val_loss 0.3639) at batch_size=96, lr
+# layer4=0.0001/head=0.001. Bumped to batch_size=256 (lr scaled 2.67x
+# to 0.00027/0.0027) to speed things up - that attempt OOM'd on this
+# 6GB RTX 3050 laptop GPU before finishing epoch 1 (log shows nothing
+# past "Starting training...", so best_model.pth is untouched at
+# epoch 2). Reverted batch_size/lr back to the known-good batch=96
+# values below; init_from_checkpoint still picks up the epoch-2 weights.
+# ============================================================
+
+experiment:
+  run_name: "tamper_resnet50_frozen_backbone_combined"
+  seed: 42
+
+data:
+  dataset_dir: "/home/user/ml_data/combined"   # 348,024 images: 180,511 authentic / 167,513 tampered
+  img_size: 224
+  batch_size: 96
+  val_ratio: 0.15
+  test_ratio: 0.15
+  num_workers: 8
+
+  augment: true
+  hflip: true
+  random_crop: true
+  color_jitter: true
+  jpeg_recompression: false
+  jpeg_quality_range: [30, 90]
+
+model:
+  # This run's OWN epoch-2 checkpoint (val_loss 0.3639) - continuing at
+  # a much larger batch size rather than restarting from the original
+  # 308K model or from scratch.
+  init_from_checkpoint: "models/saved/tamper_resnet50_frozen_backbone_combined_best.pth"
+
+  # layer4 (and its conv layers) now trainable too - only conv1/layer1/
+  # layer2/layer3 stay frozen.
+  freeze_stages: ["conv1", "layer1", "layer2", "layer3"]
+
+  # layer4 is now trainable; with a 348K-image, batch=96 dataset there's
+  # no small-batch BN-noise concern, so let BN update normally.
+  freeze_bn: false
+  dropout: 0.5
+
+optim:
+  weight_decay: 0.0001
+  # layer4 gets a lower LR than the head since it's still a large,
+  # pretrained/fine-tuned block rather than a from-scratch layer.
+  # These are the original batch=96 values (the ones the epoch-2
+  # checkpoint was actually produced with) - reverted from the 2.67x-
+  # scaled batch=256 values after that batch size OOM'd.
+  lr_groups:
+    layer4: 0.0001
+    head: 0.001
+
+loss:
+  # 180,511 authentic vs 167,513 tampered (~1.08:1) - balanced, no
+  # loss-side bias needed.
+  use_pos_weight: false
+  pos_weight: 1.0
+
+inference:
+  threshold: 0.5
+
+training:
+  # High cap; early stopping (patience=3) is what should actually end
+  # the run once it finds real overfitting evidence, same approach as
+  # the frozen_backbone_new_data_continued run.
+  epochs_cap: 50
+  early_stopping_patience: 3
+  mixed_precision: true
+
+paths:
+  # All new, distinct paths - the original model and both prior
+  # frozen-backbone checkpoints stay exactly as they are.
+  model_save_path: "models/saved/tamper_resnet50_frozen_backbone_combined_best.pth"
+  last_checkpoint_path: "models/checkpoints/tamper_resnet50_frozen_backbone_combined_last.pth"
+  split_save_path: "data/processed/split_tamper_resnet50_frozen_backbone_combined.json"
+  plots_dir: "results/plots/tamper_resnet50_frozen_backbone_combined"
+  experiments_dir: "experiments"

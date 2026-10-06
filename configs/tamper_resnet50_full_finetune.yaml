@@ -1,0 +1,96 @@
+# ============================================================
+# TamperResNet50 config: FULL FINE-TUNE variant
+#
+# Nothing is frozen (freeze_stages: []) - the entire ResNet50 backbone
+# trains, including conv1+layer1 - but those earliest two stages get a
+# much lower LR than the rest, since they encode the most generic,
+# ImageNet-general low-level features (edges/textures) and shouldn't
+# move nearly as much as the later, more task-specific stages.
+#
+# Trained on data/normalized (the full normalized dataset: 160,724
+# authentic + 147,390 tampered, ~1.09:1 - close enough to balanced that
+# use_pos_weight is left off, unlike the smaller/more-imbalanced
+# data/subset used by the other example configs).
+# ============================================================
+
+experiment:
+  run_name: "tamper_resnet50_full_finetune"
+  seed: 42
+
+data:
+  # NOTE: this must live on a native Linux filesystem, not under /mnt/c
+  # (WSL2's DrvFs mount for the Windows drive) - per-file read latency
+  # over DrvFs measured at ~40-450 files/s depending on parallelism,
+  # vs. ~4,500+ files/s on native ext4 (single-threaded, even). With
+  # 308K images read every epoch, that difference is the gap between a
+  # dataset scan taking ~1 minute vs. several hours. See
+  # docs/tamper_resnet50_pipeline.md for the benchmark.
+  dataset_dir: "/home/user/ml_data/normalized"   # 308,114 images total (authentic 160,724 / tampered 147,390)
+  img_size: 224
+  batch_size: 32
+  val_ratio: 0.15
+  test_ratio: 0.15
+  num_workers: 8                    # bumped up from the 2-image-set default: this machine has 16 cores and 308K images to feed
+
+  augment: true
+  hflip: true
+  random_crop: true
+  color_jitter: true
+  jpeg_recompression: false
+  jpeg_quality_range: [30, 90]
+
+model:
+  init_from_checkpoint: null
+
+  # Fully unfrozen - every stage trains. Contrast with
+  # tamper_resnet50_baseline.yaml's ["conv1", "layer1"].
+  freeze_stages: []
+
+  # Left off: with a full backbone unfrozen and a large (308K-image)
+  # dataset, there's no small-batch BN-noise concern the way there was
+  # on the earlier ~3-9K image experiments.
+  freeze_bn: false
+
+  dropout: 0.5
+
+optim:
+  weight_decay: 0.0001
+  # conv1_layer1 kept VERY low (1e-6, ~150x smaller than layer4's) since
+  # these are the earliest, most generic feature layers and the ones
+  # most damaged by large updates this early. LR ramps up per stage
+  # toward the head, same shape as the other configs' partial-freeze
+  # schedule - just with conv1_layer1 now also included since it's no
+  # longer frozen.
+  lr_groups:
+    conv1_layer1: 0.000001
+    layer2: 0.00001
+    layer3: 0.00005
+    layer4: 0.0002
+    head: 0.001
+
+loss:
+  # data/normalized is ~1.09:1 (authentic:tampered) - close enough to
+  # balanced that no loss-side bias is needed here.
+  use_pos_weight: false
+  pos_weight: 1.0
+
+inference:
+  threshold: 0.5
+
+training:
+  # Each epoch now covers ~215K training images (vs. ~2-7K for the
+  # other example configs) - fewer epochs are both necessary (large,
+  # diverse data converges faster in epoch-count terms) and desirable
+  # (wall-clock cost per epoch is far higher). early_stopping_patience
+  # is lowered to match - a full epoch here is expensive enough that
+  # waiting 5 non-improving ones before stopping is wasteful.
+  epochs_cap: 12
+  early_stopping_patience: 3
+  mixed_precision: true
+
+paths:
+  model_save_path: "models/saved/tamper_resnet50_full_finetune_best.pth"
+  last_checkpoint_path: "models/checkpoints/tamper_resnet50_full_finetune_last.pth"
+  split_save_path: "data/processed/split_tamper_resnet50_full_finetune.json"
+  plots_dir: "results/plots/tamper_resnet50_full_finetune"
+  experiments_dir: "experiments"
